@@ -304,7 +304,7 @@ def get_history_list(
         )
         
     except Exception as e:
-        logger.error(f"查询历史列表失败: {e}", exc_info=True)
+        logger.error(f"Failed to query history list: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -360,7 +360,7 @@ def delete_history_by_code(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"按股票代码删除历史记录失败: {e}", exc_info=True)
+        logger.error(f"Failed to delete history records by stock code: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"error": "internal_error", "message": f"删除失败: {str(e)}"},
@@ -402,7 +402,7 @@ def delete_history_records(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除历史记录失败: {e}", exc_info=True)
+        logger.error(f"Failed to delete history records: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -453,9 +453,15 @@ def get_stock_bar(
             if norm_code not in seen or record.id > seen[norm_code].id:
                 seen[norm_code] = record
 
+        visible_records = [
+            (service._display_stock_code(record.code), record)
+            for record in list(seen.values())[:limit]
+        ]
+        analysis_counts = db_manager.get_analysis_history_counts({
+            code: service._history_code_filter_candidates(code) for code, _ in visible_records
+        })
         items = []
-        for norm_code in seen:
-            record = seen[norm_code]
+        for display_stock_code, record in visible_records:
             raw_result = parse_json_field(getattr(record, "raw_result", None))
             model_used = raw_result.get("model_used") if isinstance(raw_result, dict) else None
             sentiment_score = _coalesce_int(
@@ -478,11 +484,6 @@ def get_stock_bar(
                 align_with_score=True,
             )
 
-            display_stock_code = service._display_stock_code(record.code)
-            analysis_count = db_manager.get_analysis_history_paginated(
-                code=HistoryService._history_code_filter_candidates(display_stock_code),
-                limit=1,
-            )[1]
             items.append(
                 StockBarItem(
                     id=record.id,
@@ -493,7 +494,7 @@ def get_stock_bar(
                     operation_advice=operation_advice,
                     action=action_fields["action"],
                     action_label=action_fields["action_label"],
-                    analysis_count=analysis_count,
+                    analysis_count=analysis_counts[display_stock_code],
                     last_analysis_time=service._serialize_created_at(record.created_at),
                     model_used=normalize_model_used(model_used),
                     market_phase_summary=service._display_market_phase_summary(
@@ -504,11 +505,10 @@ def get_stock_bar(
                 )
             )
 
-        items = items[:limit]
         return StockBarResponse(total=len(items), items=items)
 
     except Exception as e:
-        logger.error(f"查询个股栏失败: {e}", exc_info=True)
+        logger.error(f"Failed to query stock bar: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -681,7 +681,7 @@ def get_history_detail(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"查询历史详情失败: {e}", exc_info=True)
+        logger.error(f"Failed to query history details: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -724,7 +724,7 @@ def get_history_diagnostics(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"查询运行诊断摘要失败: {e}", exc_info=True)
+        logger.error(f"Failed to query run diagnostic summary: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -767,7 +767,7 @@ def get_history_run_flow(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"查询运行流快照失败: {e}", exc_info=True)
+        logger.error(f"Failed to query run flow snapshot: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -825,7 +825,7 @@ def get_history_news(
         )
 
     except Exception as e:
-        logger.error(f"查询新闻情报失败: {e}", exc_info=True)
+        logger.error(f"Failed to query news intelligence: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
@@ -980,7 +980,7 @@ def get_history_markdown(
             }
         )
     except Exception as e:
-        logger.error(f"获取 Markdown 报告失败: {e}", exc_info=True)
+        logger.error(f"Failed to get Markdown report: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={

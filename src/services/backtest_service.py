@@ -75,7 +75,7 @@ class BacktestService:
         if min_age_days is None:
             min_age_days = getattr(config, "backtest_min_age_days", 14)
 
-        engine_version = getattr(config, "backtest_engine_version", "v1")
+        engine_version = getattr(config, "backtest_engine_version", "v1.1")
         neutral_band_pct = float(getattr(config, "backtest_neutral_band_pct", 2.0))
 
         eval_config = EvaluationConfig(
@@ -130,6 +130,7 @@ class BacktestService:
                     stock_code=analysis.code,
                     context_snapshot=analysis.context_snapshot,
                     analysis_date=analysis_date,
+                    engine_version=str(engine_version),
                 )
                 daily_identity = start_resolution.identity
                 daily_code_candidates = (
@@ -237,7 +238,7 @@ class BacktestService:
 
             except Exception as exc:
                 errors += 1
-                logger.error(f"回测失败: {analysis.code}#{analysis.id}: {exc}")
+                logger.error(f"Backtest failed: {analysis.code}#{analysis.id}: {exc}")
                 results_to_save.append(
                     BacktestResult(
                         analysis_history_id=analysis.id,
@@ -555,7 +556,7 @@ class BacktestService:
         analysis_target: Optional[AnalysisTarget] = None,
     ) -> Dict[str, Any]:
         config = get_config()
-        engine_version = str(getattr(config, "backtest_engine_version", "v1"))
+        engine_version = str(getattr(config, "backtest_engine_version", "v1.1"))
         code, identity_kwargs = self._read_identity(
             code, analysis_target, analysis_date_from=analysis_date_from,
             analysis_date_to=analysis_date_to, analysis_phase=analysis_phase,
@@ -622,7 +623,7 @@ class BacktestService:
         analysis_target: Optional[AnalysisTarget] = None,
     ) -> Optional[Dict[str, Any]]:
         config = get_config()
-        engine_version = str(getattr(config, "backtest_engine_version", "v1"))
+        engine_version = str(getattr(config, "backtest_engine_version", "v1.1"))
         if analysis_target is not None and scope != "stock":
             raise ValueError("Validated backtest identity requires stock scope")
         code, identity_kwargs = self._read_identity(
@@ -885,7 +886,10 @@ class BacktestService:
             return parsed
         if getattr(analysis, "created_at", None):
             return analysis.created_at.date()
-        logger.warning(f"无法确定分析日期，跳过记录: {analysis.code}#{getattr(analysis, 'id', '?')}")
+        logger.warning(
+            f"Unable to determine analysis date, skipping record: "
+            f"{analysis.code}#{getattr(analysis, 'id', '?')}"
+        )
         return None
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:
@@ -909,7 +913,7 @@ class BacktestService:
                 return
             self.db.save_daily_data(df, code=refill_code, data_source=source)
         except Exception as exc:
-            logger.warning(f"补全日线数据失败({refill_code}): {exc}")
+            logger.warning(f"Failed to backfill daily data ({refill_code}): {exc}")
 
     def _recompute_summaries(self, *, touched_codes: List[str], eval_window_days: int, engine_version: str) -> None:
         with self.db.get_session() as session:
